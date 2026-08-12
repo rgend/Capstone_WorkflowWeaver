@@ -1,0 +1,27 @@
+# --- Secrets ---
+.env
+backend/.env
+credentials.json
+backend/credentials.json
+
+# --- Python ---
+.venv/
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- Runtime data ---
+backend/data/
+*.log
+
+# --- Node / frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,53 @@
+flowchart TB
+    User(["Business user"])
+
+    subgraph L1["1 . User Interface — React + Tailwind"]
+        UI["Workflow Composer / Templates / Live Log / History"]
+    end
+
+    subgraph L2["2 . Backend API — FastAPI"]
+        REST["REST endpoints\n(templates, workflows, report, health)"]
+        SSE["SSE stream\n/api/workflows/{run_id}/stream"]
+        Store[("Workflow store\n(JSON file)")]
+    end
+
+    subgraph L3["3 . AI Orchestration — LangGraph + Claude"]
+        direction TB
+        N1["parse_intent"] --> N2["plan_actions\n(Claude tool-use call)"]
+        N2 --> N3["execute_step\n(retry + exponential backoff)"]
+        N3 -->|more steps| N3
+        N3 -->|critical failure| N4["rollback\n(archive/delete created resources)"]
+        N3 -->|all steps done| N5["report"]
+        N4 --> N5
+    end
+
+    subgraph L4["4 . Tool Layer"]
+        Notion["Notion MCP server\n(stdio, @notionhq/notion-mcp-server)"]
+        Drive["Google Drive MCP server\n(stdio, community MCP server)"]
+        Teams["Microsoft Teams\nIncoming Webhook"]
+    end
+
+    subgraph L5["5 . Observability — Langfuse"]
+        Trace[("Traces: generations + spans\nper LLM call & tool invocation")]
+    end
+
+    User -->|"describes workflow in plain English"| UI
+    UI -->|"POST /api/workflows"| REST
+    REST -->|"launches background run"| N1
+    UI -->|"subscribes"| SSE
+    N1 -. emits log events .-> SSE
+    N2 -. emits log events .-> SSE
+    N3 -. emits log events .-> SSE
+    N4 -. emits log events .-> SSE
+    N5 -->|"persists ExecutionReport"| Store
+    N5 -. "done" event .-> SSE
+
+    N3 -->|"create_project_page"| Notion
+    N3 -->|"create_document"| Drive
+    N3 -->|"post_message"| Teams
+    N4 -->|"archive_page / delete_file"| Notion
+    N4 -->|"archive_page / delete_file"| Drive
+
+    N2 -.->|"generation span"| Trace
+    N3 -.->|"tool span per attempt"| Trace
+    N4 -.->|"rollback span"| Trace
