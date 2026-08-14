@@ -6,6 +6,7 @@ invocation. This is transport-agnostic to which server binary is launched —
 Notion and Google Drive adapters build on top of this.
 """
 
+import os
 import shutil
 from contextlib import AsyncExitStack
 from typing import Any
@@ -32,10 +33,19 @@ class MCPStdioClient:
         return shutil.which(command) is not None
 
     async def connect(self) -> None:
-        if not self.is_launchable(self.command):
+        # Resolve to the full path (with extension) up front: on Windows,
+        # CreateProcess can't launch a bare "npx" without its .CMD extension,
+        # so the unresolved name fails with FileNotFoundError even though
+        # shutil.which() can find it.
+        resolved_command = shutil.which(self.command)
+        if not resolved_command:
             raise MCPUnavailableError(f"MCP server command '{self.command}' not found on PATH.")
         self._stack = AsyncExitStack()
-        params = StdioServerParameters(command=self.command, args=self.args, env=self.env or None)
+        # Extra vars (tokens, paths) are layered on top of the full parent
+        # environment rather than replacing it — without PATH/SYSTEMROOT the
+        # child process (npx, python, etc.) can fail to even start on Windows.
+        merged_env = {**os.environ, **self.env} if self.env else None
+        params = StdioServerParameters(command=resolved_command, args=self.args, env=merged_env)
         read, write = await self._stack.enter_async_context(stdio_client(params))
         self.session = await self._stack.enter_async_context(ClientSession(read, write))
         await self.session.initialize()

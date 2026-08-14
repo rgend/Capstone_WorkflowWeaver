@@ -1,3 +1,4 @@
+import sys
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,10 +28,14 @@ class Settings(BaseSettings):
     notion_mcp_args: str = "-y,@notionhq/notion-mcp-server"
 
     # --- Google Drive MCP ---
+    # A first-party local MCP server (app/mcp/gdrive_server.py) launched with
+    # the same interpreter running this app — community gdrive MCP packages
+    # at time of writing don't expose a file-creation tool.
     google_credentials_path: str = "./credentials.json"
     google_drive_folder_id: str | None = None
-    gdrive_mcp_command: str = "npx"
-    gdrive_mcp_args: str = "-y,@isaacphi/mcp-gdrive"
+    gdrive_token_path: str = "./data/gdrive_token.json"
+    gdrive_mcp_command: str = sys.executable
+    gdrive_mcp_args: str = "-m,app.mcp.gdrive_server"
 
     # --- Microsoft Teams ---
     teams_webhook_url: str | None = None
