@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 
 from app.core.errors import PlanningError, ToolExecutionError
@@ -7,26 +8,63 @@ from app.graph.context import RunContext
 from app.graph.llm import generate_plan
 from app.graph.state import GraphState
 
+logger = logging.getLogger(__name__)
+
+
+def _resource_links_from_steps(prior_steps: list[dict]) -> list[dict]:
+    """Pull real, already-created Notion/Drive links out of earlier steps in
+    this same run. The LLM plans all steps up front, before any tool has
+    actually run, so it cannot know a Notion page's real URL when it writes
+    the Slack step — only the orchestrator sees each step's actual output,
+    so it (not the LLM) is responsible for wiring real links into the
+    notification.
+    """
+    links: list[dict] = []
+    for step in prior_steps:
+        output = step.get("output") or {}
+        url = output.get("url")
+        if not url:
+            continue
+        if step.get("tool") == ToolName.NOTION.value:
+            links.append({"label": f"{output.get('title') or 'Notion Page'} (Notion)", "url": url})
+        elif step.get("tool") == ToolName.GOOGLE_DRIVE.value:
+            links.append({"label": f"{output.get('name') or 'Document'} (Google Drive)", "url": url})
+    return links
+
+
 TOOL_HANDLERS = {
     ToolName.NOTION: {
-        "create_project_page": lambda ctx, inp: ctx.notion.create_project_page(
-            title=inp["title"], sections=inp.get("sections", []), parent_page_id=inp.get("parent_page_id")
+        # .get() with a fallback rather than direct indexing: an LLM-planned
+        # step's `input` isn't schema-guaranteed to have every field filled in
+        # (verified in practice — Gemini has omitted `title` on a live run),
+        # so a missing field should degrade gracefully, not crash the step.
+        "create_project_page": lambda ctx, inp, prior_steps: ctx.notion.create_project_page(
+            title=inp.get("title") or "Untitled",
+            sections=inp.get("sections", []),
+            parent_page_id=inp.get("parent_page_id"),
         ),
     },
     ToolName.GOOGLE_DRIVE: {
-        "create_document": lambda ctx, inp: ctx.gdrive.create_document(
-            name=inp["name"], content=inp.get("content", ""), folder_id=inp.get("folder_id")
+        "create_document": lambda ctx, inp, prior_steps: ctx.gdrive.create_document(
+            name=inp.get("name") or "Untitled Document",
+            content=inp.get("content", ""),
+            folder_id=inp.get("folder_id"),
+            sections=inp.get("sections"),
         ),
     },
-    ToolName.TEAMS: {
-        "post_message": lambda ctx, inp: ctx.teams.post_message(
-            title=inp["title"], text=inp.get("text", ""), facts=inp.get("facts")
+    ToolName.SLACK: {
+        "post_message": lambda ctx, inp, prior_steps: ctx.slack.post_message(
+            title=inp.get("title") or "WorkflowWeaver update",
+            text=inp.get("text", ""),
+            facts=inp.get("facts"),
+            channel=inp.get("channel"),
+            resource_links=_resource_links_from_steps(prior_steps),
         ),
     },
 }
 
 ROLLBACK_HANDLERS = {
-    ToolName.NOTION: lambda ctx, ref: ctx.notion.archive_page(ref["page_id"]),
+    ToolName.NOTION: lambda ctx, ref: ctx.notion.delete_report(ref["block_id"]),
     ToolName.GOOGLE_DRIVE: lambda ctx, ref: ctx.gdrive.delete_file(ref["file_id"]),
 }
 
@@ -64,11 +102,19 @@ async def plan_actions_node(ctx: RunContext, state: GraphState) -> dict:
         ).model_dump(mode="json")
         for s in plan.steps
     ]
+    tool_list = ", ".join(s.tool.value for s in plan.steps) or "no tool steps"
+    message = f"Plan ready: {len(plan.steps)} step(s) -> {tool_list}"
+    if plan.planning_note:
+        message = f"{plan.planning_note} {message}"
     await ctx.emit(
         "plan_actions",
         StepStatus.SUCCESS,
-        f"Plan ready: {len(plan.steps)} step(s) -> {', '.join(s.tool.value for s in plan.steps) or 'no tool steps'}",
-        detail={"intent_summary": plan.intent_summary, "step_count": len(plan.steps)},
+        message,
+        detail={
+            "intent_summary": plan.intent_summary,
+            "step_count": len(plan.steps),
+            "planning_note": plan.planning_note,
+        },
     )
     return {
         "intent_summary": plan.intent_summary,
@@ -127,21 +173,21 @@ async def execute_step_node(ctx: RunContext, state: GraphState) -> dict:
             else None
         )
         try:
-            output = await handler(ctx, planned["input"])
+            output = await handler(ctx, planned["input"], steps[:idx])
             if span:
                 span.end(output=output)
             step["status"] = StepStatus.SUCCESS.value
             step["output"] = output
             step["finished_at"] = time.time()
             if not output.get("mock") and tool in ROLLBACK_HANDLERS:
-                ref_key = "page_id" if tool == ToolName.NOTION else "file_id"
+                ref_key = "block_id" if tool == ToolName.NOTION else "file_id"
                 ref_val = output.get(ref_key)
                 if ref_val:
                     ctx.rollback_stack.append(
                         {"tool": tool.value, "ref": {ref_key: ref_val}, "step_id": step["step_id"]}
                     )
             elif output.get("mock") and tool in ROLLBACK_HANDLERS:
-                ref_key = "page_id" if tool == ToolName.NOTION else "file_id"
+                ref_key = "block_id" if tool == ToolName.NOTION else "file_id"
                 ctx.rollback_stack.append(
                     {"tool": tool.value, "ref": {ref_key: output[ref_key]}, "step_id": step["step_id"]}
                 )
@@ -154,11 +200,19 @@ async def execute_step_node(ctx: RunContext, state: GraphState) -> dict:
             )
             steps[idx] = step
             return {"steps": steps, "current_step_index": idx + 1}
-        except ToolExecutionError as exc:
-            last_error = str(exc)
+        except Exception as exc:  # noqa: BLE001 - any handler failure must still route to rollback, not crash the run
+            if isinstance(exc, ToolExecutionError):
+                last_error = str(exc)
+                retriable = exc.retriable
+            else:
+                # An unexpected error (e.g. a malformed LLM-planned input)
+                # isn't retriable — the same bad input would just fail again.
+                logger.exception("Unexpected error executing step %d (%s:%s)", idx + 1, tool.value, action)
+                last_error = f"Unexpected error: {exc!r}"
+                retriable = False
             if span:
-                span.end(level="ERROR", status_message=last_error, output={"retriable": exc.retriable})
-            if attempt < max_attempts and exc.retriable:
+                span.end(level="ERROR", status_message=last_error, output={"retriable": retriable})
+            if attempt < max_attempts and retriable:
                 backoff = ctx.settings.retry_backoff_base_seconds * (2 ** (attempt - 1))
                 step["status"] = StepStatus.RETRYING.value
                 retry_msg = (

@@ -2,14 +2,37 @@
 
 Real mode launches a Google Drive MCP server over stdio and calls its
 file-creation tool (discovered heuristically since community server tool
-names vary by package/version). Falls back to a mock response when Google
-Drive isn't configured or MOCK_MODE is enabled.
+names vary by package/version). Content is uploaded as HTML and converted to
+a native Google Doc by Drive's import conversion (see gdrive_server.py) so
+headings/bold/lists survive, rather than landing as a flat .txt file. Falls
+back to a mock response when Google Drive isn't configured or MOCK_MODE is
+enabled.
 """
+
+import json
 
 from app.core.config import Settings
 from app.core.errors import ToolExecutionError
+from app.core.formatting import plain_content_to_html, sections_to_html, timestamp_suffix
 from app.mcp.client import MCPStdioClient, MCPUnavailableError
 from app.mcp.mock import mock_drive_file
+
+
+def _parse_json(text: str) -> dict:
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError):
+        return {}
+
+
+def _doc_title(name: str) -> str:
+    # The uploaded file becomes a native Google Doc regardless of the name's
+    # extension, so drop a trailing ".txt"/".md" that would otherwise be a
+    # misleading leftover from the plain-text-document mental model.
+    for ext in (".txt", ".md"):
+        if name.lower().endswith(ext):
+            return name[: -len(ext)]
+    return name
 
 
 class GoogleDriveAdapter:
@@ -38,13 +61,26 @@ class GoogleDriveAdapter:
         await client.connect()
         return client
 
-    async def create_document(self, name: str, content: str, folder_id: str | None = None) -> dict:
+    async def create_document(
+        self,
+        name: str,
+        content: str = "",
+        folder_id: str | None = None,
+        sections: list[dict] | None = None,
+    ) -> dict:
+        # Stamp the title with the generation time — same convention as
+        # Notion pages — so the most recently created report is identifiable
+        # at a glance in a Drive folder listing full of similarly-named docs.
+        # Title-only: the doc body stays focused on the actual content.
         if self.use_mock:
-            return mock_drive_file(name)
+            return mock_drive_file(f"{_doc_title(name)} — {timestamp_suffix()}")
 
-        target_folder = folder_id or self.settings.google_drive_folder_id
         client = None
         try:
+            title = f"{_doc_title(name)} — {timestamp_suffix()}"
+            html = sections_to_html(title, sections) if sections else plain_content_to_html(title, content)
+            target_folder = folder_id or self.settings.google_drive_folder_id
+
             client = await self._new_client()
             tool_name = await client.find_tool(["create", "file"]) or await client.find_tool(["upload"])
             if not tool_name:
@@ -54,17 +90,32 @@ class GoogleDriveAdapter:
             result = await client.call_tool(
                 tool_name,
                 {
-                    "name": name,
-                    "mimeType": "text/plain",
-                    "content": content,
+                    "name": title,
+                    "mimeType": "text/html",
+                    "content": html,
                     "parents": [target_folder] if target_folder else [],
                 },
             )
             if result["is_error"]:
                 raise ToolExecutionError("google_drive", "create_document", result["text"])
-            return {"mock": False, "raw_response": result["text"], "name": name}
+            parsed = _parse_json(result["text"])
+            return {
+                "mock": False,
+                "file_id": parsed.get("id"),
+                "url": parsed.get("webViewLink"),
+                "name": title,
+                "raw_response": result["text"],
+            }
         except MCPUnavailableError as exc:
             raise ToolExecutionError("google_drive", "create_document", str(exc), retriable=False) from exc
+        except ToolExecutionError:
+            raise
+        except Exception as exc:
+            # A malformed LLM-planned `sections`/`content` shape (or any other
+            # formatting surprise) must still come back as a classified,
+            # non-retriable step failure rather than an unhandled crash that
+            # bypasses the graph's retry/rollback accounting.
+            raise ToolExecutionError("google_drive", "create_document", repr(exc), retriable=False) from exc
         finally:
             if client:
                 await client.close()

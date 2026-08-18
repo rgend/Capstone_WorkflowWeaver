@@ -15,7 +15,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
             "llm": {"provider": settings.llm_provider, "configured": settings.llm_configured},
             "notion": {"configured": settings.notion_configured},
             "google_drive": {"configured": settings.gdrive_configured},
-            "teams": {"configured": settings.teams_configured},
+            "slack": {"configured": settings.slack_configured},
             "langfuse": {"configured": settings.langfuse_configured},
         },
     }

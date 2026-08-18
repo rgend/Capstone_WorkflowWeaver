@@ -25,7 +25,7 @@ def test_start_workflow_and_fetch_report(client):
     start = client.post(
         "/api/workflows",
         json={
-            "description": "Create a Notion page and post a Teams summary about the launch.",
+            "description": "Create a Notion page and post a Slack summary about the launch.",
             "meeting_notes": None,
         },
     )

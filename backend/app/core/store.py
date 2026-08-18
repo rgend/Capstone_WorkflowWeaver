@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 
+from pydantic import ValidationError
+
 from app.core.models import ExecutionReport, WorkflowSummary
 
 
@@ -24,10 +26,16 @@ class WorkflowStore:
         try:
             with open(self.path, encoding="utf-8") as f:
                 raw = json.load(f)
-            for run_id, data in raw.items():
-                self._reports[run_id] = ExecutionReport.model_validate(data)
         except (json.JSONDecodeError, OSError):
             self._reports = {}
+            return
+        for run_id, data in raw.items():
+            try:
+                self._reports[run_id] = ExecutionReport.model_validate(data)
+            except ValidationError:
+                # Skip records that predate a schema change (e.g. a renamed
+                # tool) instead of letting one legacy record crash startup.
+                continue
 
     def _persist(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

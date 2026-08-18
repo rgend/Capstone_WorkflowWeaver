@@ -7,12 +7,13 @@ TEMPLATES: list[WorkflowTemplate] = [
         category="Productivity",
         icon="clipboard-list",
         description=(
-            "Turn raw meeting notes into a Notion project page with action items, "
-            "then notify the team on Microsoft Teams."
+            "Turn raw meeting notes into a Notion project page with action items, save a "
+            "summary document to Google Drive, and notify the team on Slack."
         ),
         nl_description=(
             "Take today's meeting notes and create a Notion project page, "
-            "generate action items with owners, and post a summary to Microsoft Teams."
+            "generate action items with owners, save a summary document to Google Drive, "
+            "and post a summary to Slack."
         ),
         default_config=WorkflowConfig(),
     ),
@@ -23,12 +24,12 @@ TEMPLATES: list[WorkflowTemplate] = [
         icon="calendar",
         description=(
             "Create a Notion sprint board page from a backlog description, save the sprint "
-            "goal doc to Google Drive, and announce the sprint kickoff on Teams."
+            "goal doc to Google Drive, and announce the sprint kickoff on Slack."
         ),
         nl_description=(
             "From this backlog list, create a Notion sprint page with a prioritized task "
             "breakdown, save a sprint goal summary document to Google Drive, and post a "
-            "kickoff announcement to Microsoft Teams with the sprint goal and dates."
+            "kickoff announcement to Slack with the sprint goal and dates."
         ),
         default_config=WorkflowConfig(),
     ),
@@ -39,12 +40,12 @@ TEMPLATES: list[WorkflowTemplate] = [
         icon="alert-triangle",
         description=(
             "Document an incident in Notion, archive the full postmortem to Google Drive, "
-            "and alert stakeholders on Microsoft Teams immediately."
+            "and alert stakeholders on Slack immediately."
         ),
         nl_description=(
             "An incident just occurred. Create a Notion incident report page with impact, "
             "timeline, and remediation steps, save the full postmortem document to Google "
-            "Drive, and post an urgent summary notification to Microsoft Teams."
+            "Drive, and post an urgent summary notification to Slack."
         ),
         default_config=WorkflowConfig(),
     ),
@@ -54,13 +55,13 @@ TEMPLATES: list[WorkflowTemplate] = [
         category="Product",
         icon="file-text",
         description=(
-            "Convert an unstructured requirements list into a structured Notion backlog "
-            "and notify the product team on Teams."
+            "Convert an unstructured requirements list into a structured Notion backlog, save "
+            "a copy to Google Drive, and notify the product team on Slack."
         ),
         nl_description=(
             "Take this requirements list and create a structured Notion backlog page with "
-            "each requirement as a task with priority, then post a notification to "
-            "Microsoft Teams summarizing what was added."
+            "each requirement as a task with priority, save a copy to Google Drive, and post "
+            "a notification to Slack summarizing what was added."
         ),
         default_config=WorkflowConfig(),
     ),

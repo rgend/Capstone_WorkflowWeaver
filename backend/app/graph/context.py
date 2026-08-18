@@ -5,7 +5,7 @@ from typing import Any
 
 from app.core.config import Settings
 from app.core.models import RunStatus, SSEEvent, StepStatus
-from app.integrations.teams_client import TeamsClient
+from app.integrations.slack_client import SlackClient
 from app.mcp.gdrive_adapter import GoogleDriveAdapter
 from app.mcp.notion_adapter import NotionAdapter
 
@@ -19,7 +19,7 @@ class RunContext:
     emit_raw: EmitFn
     notion: NotionAdapter
     gdrive: GoogleDriveAdapter
-    teams: TeamsClient
+    slack: SlackClient
     langfuse_trace: Any = None
     rollback_stack: list[dict[str, Any]] = field(default_factory=list)
     _seq: int = 0

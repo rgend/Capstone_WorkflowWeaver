@@ -63,7 +63,11 @@ async def list_tools() -> list[types.Tool]:
     return [
         types.Tool(
             name="create_file",
-            description="Create a new file in Google Drive with the given name and text content",
+            description=(
+                "Create a new file in Google Drive with the given name and content. "
+                "When mimeType is 'text/html', Drive converts it into a native Google "
+                "Doc on upload (headings/bold/lists are preserved)."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -92,13 +96,18 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     service = await anyio.to_thread.run_sync(_drive_service)
 
     if name == "create_file":
+        media_mime_type = arguments.get("mimeType", "text/plain")
         metadata = {"name": arguments["name"]}
+        if media_mime_type == "text/html":
+            # Import-convert the uploaded HTML into a native Google Doc
+            # instead of storing it as a raw .html/.txt blob.
+            metadata["mimeType"] = "application/vnd.google-apps.document"
         parents = arguments.get("parents") or []
         if parents:
             metadata["parents"] = parents
         media = MediaInMemoryUpload(
             arguments.get("content", "").encode("utf-8"),
-            mimetype=arguments.get("mimeType", "text/plain"),
+            mimetype=media_mime_type,
         )
 
         def _create():

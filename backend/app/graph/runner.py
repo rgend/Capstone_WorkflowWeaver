@@ -1,3 +1,4 @@
+import logging
 import time
 from collections.abc import Awaitable, Callable
 
@@ -13,7 +14,7 @@ from app.core.models import (
 from app.core.store import WorkflowStore
 from app.graph.build import build_graph
 from app.graph.context import RunContext
-from app.integrations.teams_client import TeamsClient
+from app.integrations.slack_client import SlackClient
 from app.mcp.gdrive_adapter import GoogleDriveAdapter
 from app.mcp.notion_adapter import NotionAdapter
 
@@ -21,6 +22,8 @@ try:
     from langfuse import Langfuse
 except ImportError:  # pragma: no cover
     Langfuse = None
+
+logger = logging.getLogger(__name__)
 
 
 def _build_langfuse_client(settings: Settings):
@@ -59,7 +62,7 @@ async def run_workflow(
         emit_raw=emit_raw,
         notion=NotionAdapter(settings),
         gdrive=GoogleDriveAdapter(settings),
-        teams=TeamsClient(settings),
+        slack=SlackClient(settings),
         langfuse_trace=trace,
     )
 
@@ -84,7 +87,8 @@ async def run_workflow(
         graph = build_graph(ctx)
         final_state = await graph.ainvoke(initial_state, config={"recursion_limit": 100})
     except Exception as exc:  # noqa: BLE001 - surface any unexpected node error into the report
-        error = str(exc)
+        logger.exception("Workflow run %s crashed", run_id)
+        error = repr(exc)
         final_state["status"] = RunStatus.FAILED.value
         await ctx.emit("run", RunStatus.FAILED, f"Workflow run crashed: {error}")
     finally:
@@ -100,7 +104,7 @@ async def run_workflow(
         started_at=started_at,
         finished_at=time.time(),
         error=error or final_state.get("error"),
-        langfuse_trace_url=(f"{settings.langfuse_host}/trace/{run_id}" if langfuse_client else None),
+        langfuse_trace_url=(langfuse_client.get_trace_url() if langfuse_client else None),
         mock_mode=settings.mock_mode,
     )
 

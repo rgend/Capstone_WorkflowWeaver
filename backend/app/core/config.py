@@ -8,8 +8,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # --- LLM ---
+    # llm_provider selects the planning backend: "anthropic" (Claude tool-use)
+    # or "google-gemini-ai" (Gemini function-calling). llm_model overrides the
+    # per-provider default below when set.
     llm_provider: str = "anthropic"
     llm_api_key: str | None = None
+    llm_model: str | None = None
+    llm_max_output_tokens: int = 4096
     anthropic_model: str = "claude-sonnet-4-5-20250929"
     openai_model: str = "gpt-4o"
 
@@ -37,8 +42,9 @@ class Settings(BaseSettings):
     gdrive_mcp_command: str = sys.executable
     gdrive_mcp_args: str = "-m,app.mcp.gdrive_server"
 
-    # --- Microsoft Teams ---
-    teams_webhook_url: str | None = None
+    # --- Slack ---
+    slack_bot_token: str | None = None
+    slack_channel_id: str | None = None
 
     # --- Langfuse ---
     langfuse_public_key: str | None = None
@@ -63,8 +69,8 @@ class Settings(BaseSettings):
         return bool(self.google_drive_folder_id and os.path.exists(self.google_credentials_path))
 
     @property
-    def teams_configured(self) -> bool:
-        return bool(self.teams_webhook_url)
+    def slack_configured(self) -> bool:
+        return bool(self.slack_bot_token and self.slack_channel_id)
 
     @property
     def langfuse_configured(self) -> bool:

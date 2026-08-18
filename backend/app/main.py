@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import health, templates, workflows
 from app.core.config import get_settings
 from app.core.store import WorkflowStore
+
+# Uvicorn only configures its own "uvicorn"/"uvicorn.access"/"uvicorn.error"
+# loggers, not the app's — without this, logger.warning/.exception calls in
+# app.graph.* silently go nowhere, which is exactly how a real planning
+# fallback or step crash could happen with zero trace in the server log.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
 @asynccontextmanager
@@ -19,7 +26,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="WorkflowWeaver API",
-    description="AI agent that executes natural-language business workflows across Notion, Google Drive, and Teams.",
+    description="AI agent that executes natural-language business workflows across Notion, Google Drive, and Slack.",
     version="1.0.0",
     lifespan=lifespan,
 )

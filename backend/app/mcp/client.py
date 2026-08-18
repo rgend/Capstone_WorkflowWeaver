@@ -33,18 +33,32 @@ class MCPStdioClient:
         return shutil.which(command) is not None
 
     async def connect(self) -> None:
-        # Resolve to the full path (with extension) up front: on Windows,
-        # CreateProcess can't launch a bare "npx" without its .CMD extension,
-        # so the unresolved name fails with FileNotFoundError even though
-        # shutil.which() can find it.
-        resolved_command = shutil.which(self.command)
-        if not resolved_command:
-            raise MCPUnavailableError(f"MCP server command '{self.command}' not found on PATH.")
-        self._stack = AsyncExitStack()
         # Extra vars (tokens, paths) are layered on top of the full parent
         # environment rather than replacing it — without PATH/SYSTEMROOT the
         # child process (npx, python, etc.) can fail to even start on Windows.
-        merged_env = {**os.environ, **self.env} if self.env else None
+        merged_env = {**os.environ, **self.env} if self.env else dict(os.environ)
+
+        # Resolve to the full path (with extension) up front: on Windows,
+        # CreateProcess can't launch a bare "npx" without its .CMD extension,
+        # so the unresolved name fails with FileNotFoundError even though
+        # shutil.which() can find it. Resolve against merged_env's PATH (not
+        # just this process's) so a caller-supplied PATH override is honored.
+        resolved_command = shutil.which(self.command, path=merged_env.get("PATH"))
+        if not resolved_command:
+            raise MCPUnavailableError(f"MCP server command '{self.command}' not found on PATH.")
+
+        # If PATH has more than one Node install on it (common on Windows
+        # dev machines), npx.cmd itself running under the right node.exe
+        # isn't enough: npx re-execs the target package's bin via a shebang
+        # lookup that re-resolves "node" from PATH, so an older/incompatible
+        # install earlier on PATH gets picked regardless of which npx we
+        # launched. Prepending the resolved command's own directory makes
+        # that re-exec consistent with what we intended to run.
+        resolved_dir = os.path.dirname(resolved_command)
+        if merged_env.get("PATH"):
+            merged_env["PATH"] = resolved_dir + os.pathsep + merged_env["PATH"]
+
+        self._stack = AsyncExitStack()
         params = StdioServerParameters(command=resolved_command, args=self.args, env=merged_env)
         read, write = await self._stack.enter_async_context(stdio_client(params))
         self.session = await self._stack.enter_async_context(ClientSession(read, write))

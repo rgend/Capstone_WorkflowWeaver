@@ -28,7 +28,7 @@ async def start_workflow(
             raise HTTPException(status_code=404, detail="Unknown template_id")
         if not request.description.strip():
             request.description = template.nl_description
-        for field in ("workspace", "notion_page_id", "drive_folder_id", "teams_channel"):
+        for field in ("workspace", "notion_page_id", "drive_folder_id", "slack_channel"):
             if getattr(request.config, field) is None:
                 setattr(request.config, field, getattr(template.default_config, field))
 

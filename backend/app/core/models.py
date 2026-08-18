@@ -30,7 +30,7 @@ class RunStatus(str, Enum):
 class ToolName(str, Enum):
     NOTION = "notion"
     GOOGLE_DRIVE = "google_drive"
-    TEAMS = "teams"
+    SLACK = "slack"
     NONE = "none"
 
 
@@ -38,7 +38,7 @@ class WorkflowConfig(BaseModel):
     workspace: str | None = None
     notion_page_id: str | None = None
     drive_folder_id: str | None = None
-    teams_channel: str | None = None
+    slack_channel: str | None = None
 
 
 class WorkflowRequest(BaseModel):
@@ -61,6 +61,7 @@ class PlannedStep(BaseModel):
 class WorkflowPlan(BaseModel):
     intent_summary: str
     steps: list[PlannedStep]
+    planning_note: str | None = None
 
 
 class StepResult(BaseModel):
