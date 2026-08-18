@@ -11,9 +11,9 @@ flowchart TB
         Store[("Workflow store\n(JSON file)")]
     end
 
-    subgraph L3["3 . AI Orchestration — LangGraph + Claude"]
+    subgraph L3["3 . AI Orchestration — LangGraph + LLM (Claude or Gemini)"]
         direction TB
-        N1["parse_intent"] --> N2["plan_actions\n(Claude tool-use call)"]
+        N1["parse_intent"] --> N2["plan_actions\n(LLM call, falls back to an\noffline planner if it fails)"]
         N2 --> N3["execute_step\n(retry + exponential backoff)"]
         N3 -->|more steps| N3
         N3 -->|critical failure| N4["rollback\n(archive/delete created resources)"]
@@ -22,9 +22,9 @@ flowchart TB
     end
 
     subgraph L4["4 . Tool Layer"]
-        Notion["Notion MCP server\n(stdio, @notionhq/notion-mcp-server)"]
-        Drive["Google Drive MCP server\n(stdio, community MCP server)"]
-        Teams["Microsoft Teams\nIncoming Webhook"]
+        Notion["Notion MCP server\n(stdio, @notionhq/notion-mcp-server)\nreport = one toggle block,\nnewest inserted at the top"]
+        Drive["Google Drive MCP server\n(stdio, first-party server)"]
+        Slack["Slack Web API\n(chat.postMessage)\nauto-links the Notion/Drive\nartifacts from this run"]
     end
 
     subgraph L5["5 . Observability — Langfuse"]
@@ -44,9 +44,9 @@ flowchart TB
 
     N3 -->|"create_project_page"| Notion
     N3 -->|"create_document"| Drive
-    N3 -->|"post_message"| Teams
-    N4 -->|"archive_page / delete_file"| Notion
-    N4 -->|"archive_page / delete_file"| Drive
+    N3 -->|"post_message"| Slack
+    N4 -->|"delete_report / delete_file"| Notion
+    N4 -->|"delete_report / delete_file"| Drive
 
     N2 -.->|"generation span"| Trace
     N3 -.->|"tool span per attempt"| Trace
