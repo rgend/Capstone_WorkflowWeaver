@@ -1,0 +1,39 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Overrides for values in backend/.env that are host-specific (a
+      # Windows-only alternate npx path, a host-relative credentials path) —
+      # the container has its own correctly-installed Node/npx and its own
+      # mounted paths below, so those host overrides must not leak in.
+      - NOTION_MCP_COMMAND=npx
+      - NOTION_MCP_ARGS=-y,@notionhq/notion-mcp-server
+      - GOOGLE_CREDENTIALS_PATH=/app/credentials.json
+      - GDRIVE_TOKEN_PATH=/app/data/gdrive_token.json
+      - WORKFLOW_STORE_PATH=/app/data/workflows.json
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - ./backend/data:/app/data
+      - ./credentials.json:/app/credentials.json:ro
+      - npx_cache:/root/.npm
+    working_dir: /app
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_PROXY_TARGET=http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  npx_cache:
