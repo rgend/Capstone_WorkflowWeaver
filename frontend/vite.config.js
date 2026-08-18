@@ -5,9 +5,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        // Overridden to the backend's Compose service name (e.g. "backend")
+        // when running in Docker, where 127.0.0.1 would mean "this container".
+        target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },

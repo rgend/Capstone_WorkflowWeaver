@@ -15,6 +15,6 @@ export function statusMeta(status) {
 export const TOOL_META = {
   notion: { label: 'Notion', emoji: '\u{1F4D3}' },
   google_drive: { label: 'Google Drive', emoji: '\u{1F4C2}' },
-  teams: { label: 'Microsoft Teams', emoji: '\u{1F4AC}' },
+  slack: { label: 'Slack', emoji: '\u{1F4AC}' },
   none: { label: 'Agent', emoji: '\u{1F916}' },
 }

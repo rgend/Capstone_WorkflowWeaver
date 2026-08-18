@@ -1,15 +1,11 @@
 import { useState } from 'react'
 import { startWorkflow } from '../api'
 
-const EMPTY_CONFIG = { workspace: '', notion_page_id: '', drive_folder_id: '', teams_channel: '' }
-
 // Parent remounts this component (via `key`) whenever a new template is
 // picked, so prefill only needs to seed initial state — no effect needed.
 export default function WorkflowComposer({ prefill, onRunStarted, disabled }) {
   const [description, setDescription] = useState(prefill?.nl_description || '')
   const [meetingNotes, setMeetingNotes] = useState('')
-  const [config, setConfig] = useState(EMPTY_CONFIG)
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [templateId, setTemplateId] = useState(prefill?.id ?? null)
@@ -23,14 +19,10 @@ export default function WorkflowComposer({ prefill, onRunStarted, disabled }) {
     setSubmitting(true)
     setError(null)
     try {
-      const cleanedConfig = Object.fromEntries(
-        Object.entries(config).map(([k, v]) => [k, v?.trim() ? v.trim() : null])
-      )
       const { run_id } = await startWorkflow({
         description,
         meeting_notes: meetingNotes.trim() || null,
         template_id: templateId,
-        config: cleanedConfig,
       })
       onRunStarted(run_id, { description, meeting_notes: meetingNotes })
       setSubmitting(false)
@@ -53,7 +45,7 @@ export default function WorkflowComposer({ prefill, onRunStarted, disabled }) {
             setTemplateId(null)
           }}
           rows={4}
-          placeholder="e.g. Take today's meeting notes and create a Notion project page, generate action items, and post a summary to Microsoft Teams."
+          placeholder="e.g. Take today's meeting notes and create a Notion project page, generate action items, and post a summary to Slack."
           className="w-full rounded-lg bg-white/5 border border-white/10 focus:border-brand-400 focus:ring-1 focus:ring-brand-400 outline-none px-3.5 py-3 text-sm text-white placeholder:text-slate-500 resize-none"
         />
       </div>
@@ -69,29 +61,6 @@ export default function WorkflowComposer({ prefill, onRunStarted, disabled }) {
           placeholder={'Paste raw meeting notes or a requirements list here, e.g.\n- Discuss Q3 roadmap\n- Assign API redesign to backend team'}
           className="w-full rounded-lg bg-white/5 border border-white/10 focus:border-brand-400 focus:ring-1 focus:ring-brand-400 outline-none px-3.5 py-3 text-sm text-white placeholder:text-slate-500 font-mono resize-none"
         />
-      </div>
-
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((s) => !s)}
-          className="text-xs text-brand-300 hover:text-brand-200"
-        >
-          {showAdvanced ? '− Hide' : '+ Show'} configuration (workspace, folder, channel)
-        </button>
-        {showAdvanced && (
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            {Object.keys(EMPTY_CONFIG).map((key) => (
-              <input
-                key={key}
-                value={config[key]}
-                onChange={(e) => setConfig((c) => ({ ...c, [key]: e.target.value }))}
-                placeholder={key.replace(/_/g, ' ')}
-                className="rounded-md bg-white/5 border border-white/10 focus:border-brand-400 outline-none px-3 py-2 text-xs text-white placeholder:text-slate-500"
-              />
-            ))}
-          </div>
-        )}
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}

@@ -2,7 +2,7 @@ const LABELS = {
   llm: 'LLM',
   notion: 'Notion',
   google_drive: 'Google Drive',
-  teams: 'Teams',
+  slack: 'Slack',
   langfuse: 'Langfuse',
 }
 
