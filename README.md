@@ -10,6 +10,33 @@ Google Drive, and Slack, with live streamed progress, retries, and rollback on f
 
 ---
 
+## Note on Technology Substitutions
+
+This capstone's brief specifies Anthropic Claude as the LLM and Microsoft Teams for
+notifications. Two substitutions were made, both driven by access constraints outside this
+project's control rather than a design preference:
+
+- **Google Gemini in place of Anthropic Claude.** Organizational API access policy did not permit
+  provisioning an Anthropic key for this project. Rather than drop Claude support, both providers
+  are fully implemented behind the same `LLM_PROVIDER` switch (`app/graph/llm.py`:
+  `_plan_with_anthropic` / `_plan_with_gemini`) — the tool-use/function-calling planning logic,
+  the retry/fallback behavior, and the Langfuse tracing are identical either way. Gemini is the
+  active provider only because that's the key available in this environment; switching to Claude
+  is a one-line config change (`LLM_PROVIDER=anthropic` + `LLM_API_KEY`), not a code migration.
+- **Slack in place of Microsoft Teams.** The organization's Teams Incoming Webhook/Workflow
+  connector could not be provisioned in time (a common enterprise IT approval bottleneck). Slack's
+  Web API (`chat.postMessage`) was substituted as a fully working, architecturally equivalent
+  stand-in for the "post a notification to the team channel" requirement — same tool-layer
+  position, same retry/rollback semantics, same place in the LangGraph state machine. The adapter
+  pattern used throughout the tool layer (see Architecture Description below) means adding Teams
+  back alongside or instead of Slack is a contained, single-adapter change.
+
+Every other requirement in the brief — LangGraph orchestration, MCP-based Notion/Drive
+integration, Langfuse observability, SSE streaming, templates, retry/rollback — is implemented
+as specified, against real accounts, not simulated.
+
+---
+
 ## 1. Project Overview
 
 WorkflowWeaver is an agentic workflow-automation platform for cross-tool business processes.

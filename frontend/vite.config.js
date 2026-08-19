@@ -6,6 +6,13 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Vite blocks requests with an unrecognized Host header by default (DNS
+    // rebinding protection). Set to the public hostname when fronting this
+    // dev server with a tunnel (ngrok, Cloudflare Tunnel, etc.) — comma-separated
+    // for more than one.
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS
+      ? process.env.VITE_ALLOWED_HOSTS.split(',').map((h) => h.trim())
+      : undefined,
     proxy: {
       '/api': {
         // Overridden to the backend's Compose service name (e.g. "backend")
